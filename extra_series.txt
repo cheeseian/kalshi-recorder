@@ -1,0 +1,2 @@
+# extra series recorded in full by ws_book.py (one per line)
+KXCRYPTOLEAD15M

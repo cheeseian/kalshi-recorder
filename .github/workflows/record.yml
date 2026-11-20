@@ -1,0 +1,52 @@
+# Records Kalshi 15-minute order books (read-only) and runs the queue-aware maker / arbitrage simulations on them.
+# Results (small CSVs) are committed to the `data` branch. Needs repo secrets KALSHI_API_KEY_ID and KALSHI_PRIVATE_KEY.
+# Public repo: GitHub-hosted runners are free. Never places orders.
+name: record
+on:
+  schedule:
+    - cron: "7 */5 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: record
+  cancel-in-progress: false
+env:
+  SERIES: >-
+    KXBTC15M KXETH15M KXSOL15M KXXRP15M KXDOGE15M KXBNB15M KXHYPE15M KXZEC15M KXNEAR15M KXGOLD15M KXSILVER15M
+    KXWTI15M KXBRENT15M KXNATGAS15M KXCOPPER15M KXPLATINUM15M KXPALLADIUM15M KXEURUSD15M KXGBPUSD15M KXUSDJPY15M
+    KXAUDUSD15M KXUSDCAD15M KX2YRRATE15M KX5YRRATE15M KX10YRRATE15M KX30YRRATE15M KXINX15M
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests cryptography websockets pandas pyarrow
+      - name: Record order books (capped at 4 h 45 min in CI)
+        env:
+          KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+        run: python ws_book.py --tail 120 --duration 20400 --out "$RUNNER_TEMP/ws" $SERIES
+      - name: Simulations (0.2 / 0.4 / 0.8 s latency)
+        env:
+          KALSHI_API_KEY_ID: ${{ secrets.KALSHI_API_KEY_ID }}
+          KALSHI_PRIVATE_KEY: ${{ secrets.KALSHI_PRIVATE_KEY }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/out"; stamp=$(date -u +%Y%m%dT%H%M)
+          for L in 200 400 800; do
+            WS_STORE="$RUNNER_TEMP/ws" LAT_MS=$L OUT_CSV="$RUNNER_TEMP/out/h7b_${stamp}_lat${L}.csv" python sim/l2_maker.py $SERIES
+          done
+      - name: Commit results to the data branch
+        run: |
+          git config user.name "recorder"; git config user.email "recorder@users.noreply.github.com"
+          if git ls-remote --exit-code origin data >/dev/null; then
+            git fetch origin data && git checkout -f -B data origin/data
+          else
+            git checkout --orphan data && git rm -rqf --cached . && git clean -fdqx
+          fi
+          mkdir -p results && cp "$RUNNER_TEMP"/out/*.csv results/
+          git add results && git commit -qm "results $(date -u +%FT%H:%M)" && git push -q origin data

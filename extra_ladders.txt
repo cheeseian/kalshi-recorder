@@ -1,0 +1,3 @@
+# ladder_series  reference_15m_series   (near-the-money strikes, final 70 minutes; read by ws_book.py)
+KXBTCD KXBTC15M
+KXETHD KXETH15M
