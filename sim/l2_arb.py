@@ -8,6 +8,7 @@ sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")
 from kalshi_client import KalshiClient
 STORE = os.environ.get("WS_STORE", os.path.join(os.path.dirname(__file__), "../data/store/ws"))
 PAIRS = {"KXBTCD": "KXBTC15M", "KXETHD": "KXETH15M"}
+EXEC_LAT_MS = int(os.environ.get("ARB_EXEC_LAT_MS", "200"))
 c = KalshiClient(); meta = {}; books = {}; open_ep = {}; eps = []
 def info(t):
     if t not in meta:
@@ -58,12 +59,16 @@ for fn in sorted(glob.glob(f"{STORE}/*_[0-9]*.jsonl.gz")):
                     if all(q) and all(0 < a[0] < 1 for a in q):
                         cost = sum(a[0] + fee(a[0]) for a in q); size = min(a[1] for a in q)
                         if cost < 1:
-                            if key not in open_ep: open_ep[key] = dict(close=cl, ladder=lad_ser, typ=typ, start_ms=ts, min_cost=cost, max_size=size, secs_to_close=cl - ts / 1000, legs="|".join(l[0] for l, _ in legs))
+                            if key not in open_ep: open_ep[key] = dict(close=cl, ladder=lad_ser, typ=typ, start_ms=ts, min_cost=cost, max_size=size, secs_to_close=cl - ts / 1000, legs="|".join(l[0] for l, _ in legs), exec_cost=float("nan"), exec_size=float("nan"))
                             e = open_ep[key]; e["min_cost"] = min(e["min_cost"], cost); e["max_size"] = max(e["max_size"], size); e["end_ms"] = ts
+                            if e["exec_cost"] != e["exec_cost"] and ts >= e["start_ms"] + EXEC_LAT_MS:   # what an order arriving 200 ms after detection would see
+                                e["exec_cost"] = cost; e["exec_size"] = size
                             continue
                     if key in open_ep: eps.append(open_ep.pop(key))
     except (EOFError, OSError): pass
 eps += list(open_ep.values()); f = pd.DataFrame(eps)
-if len(f): f["dur_s"] = (f.end_ms - f.start_ms) / 1000; f["profit_at_size"] = (1 - f.min_cost) * f.max_size
+if len(f):
+    f["dur_s"] = (f.end_ms - f.start_ms) / 1000; f["profit_at_size"] = (1 - f.min_cost) * f.max_size
+    f["exec_profit"] = (1 - f.exec_cost) * f.exec_size   # realistic: cost and size at our arrival (NaN if the episode was gone)
 print("episodes", len(f)); print(f.describe().round(3).to_string() if len(f) else "")
 if os.environ.get("OUT_CSV"): (f if len(f) else pd.DataFrame(columns=["close", "ladder", "typ", "min_cost", "max_size"])).to_csv(os.environ["OUT_CSV"], index=False)
