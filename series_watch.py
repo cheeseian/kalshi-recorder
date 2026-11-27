@@ -19,7 +19,7 @@ for status in ("active", "upcoming"):
         if cur: p["cursor"] = cur
         try: d = c._req("GET", "/incentive_programs", params=p)
         except Exception: break
-        ps = d.get("incentive_programs") or []; lip += sum("15M" in x.get("market_ticker", "") for x in ps); cur = d.get("next_cursor")
+        ps = d.get("incentive_programs") or []; lip += sum(x.get("series_ticker", "").endswith("15M") for x in ps); cur = d.get("next_cursor")
         if not cur or not ps: break
 f["lip_15m_programs_active_or_upcoming"] = lip; print("15M incentive programs:", lip)
 if os.environ.get("OUT_CSV"): f.to_csv(os.environ["OUT_CSV"], index=False)
