@@ -24,11 +24,16 @@ class Sink:
     def close(self):
         if self.f: self.f.close()
 
+_empty = {}   # series -> time it last had no open markets (re-checked every 15 min, keeps the listing loop short)
 def open_markets(c, series):
     out = []
     for s in series:
+        if time.time() - _empty.get(s, 0) < 900: continue
         try:
-            for m in c._req("GET", "/markets", params={"series_ticker": s, "status": "open", "limit": 50}).get("markets", []):
+            ms = c._req("GET", "/markets", params={"series_ticker": s, "status": "open", "limit": 50}).get("markets", [])
+            if ms: _empty.pop(s, None)
+            else: _empty[s] = time.time()
+            for m in ms:
                 out.append((m["ticker"], calendar.timegm(time.strptime(m["close_time"][:19], "%Y-%m-%dT%H:%M:%S"))))
         except Exception as e: print("list fail", s, e, flush=True)
     return out
