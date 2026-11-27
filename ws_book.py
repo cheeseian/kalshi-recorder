@@ -25,10 +25,10 @@ class Sink:
         if self.f: self.f.close()
 
 _empty = {}   # series -> time it last had no open markets (re-checked every 15 min, keeps the listing loop short)
-def open_markets(c, series):
+def open_markets(c, series, throttle=()):
     out = []
     for s in series:
-        if time.time() - _empty.get(s, 0) < 900: continue
+        if s in throttle and time.time() - _empty.get(s, 0) < 900: continue
         try:
             ms = c._req("GET", "/markets", params={"series_ticker": s, "status": "open", "limit": 50}).get("markets", [])
             if ms: _empty.pop(s, None)
@@ -82,7 +82,7 @@ async def run(series, tail, duration, out):
                     if now - last_list > 60:
                         xf = os.path.join(os.path.dirname(os.path.abspath(__file__)), "extra_series.txt")
                         extra = [l.strip() for l in open(xf) if l.strip() and not l.startswith("#")] if os.path.exists(xf) else []
-                        markets = open_markets(c, list(series) + [x for x in extra if x not in series]) + ladder_markets(c); last_list = now
+                        xs = [x for x in extra if x not in series]; markets = open_markets(c, list(series) + xs, throttle=set(xs)) + ladder_markets(c); last_list = now
                     if now - last > (5 if tail else 60):
                         last = now
                         closes.update(dict(markets))
