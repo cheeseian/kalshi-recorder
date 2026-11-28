@@ -1,0 +1,2 @@
+close,ladder,typ,start_ms,min_cost,max_size,secs_to_close,legs,exec_cost,exec_size,end_ms,dur_s,profit_at_size,exec_profit
+1795863600,KXBTCD,H,1795862934713,0.999085,0.20000000000009166,665.2869999408722,KXBTC15M-26NOV280600-00|KXBTCD-26NOV2806-T59199.99,,,1795862934717,0.004,0.0001830000000000837,
